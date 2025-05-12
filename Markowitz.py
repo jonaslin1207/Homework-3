@@ -115,7 +115,7 @@ class RiskParityPortfolio:
         TODO: Complete Task 2 Below
         """
 
-        # print(df_returns.head())
+
         for i in range(self.lookback+1, len(df_returns)):
             # Slice the DataFrame to get the lookback window
             # Containing only the assets
@@ -129,7 +129,7 @@ class RiskParityPortfolio:
             # Assign the weights to the portfolio
             self.portfolio_weights.loc[df_returns.index[i], assets] = w
 
-        # self.portfolio_weights.bfill(limit=self.lookback, inplace=True)
+
         """
         TODO: Complete Task 2 Above
         """
@@ -204,8 +204,22 @@ class MeanVariancePortfolio:
 
                 # Sample Code: Initialize Decision w and the Objective
                 # NOTE: You can modify the following code
-                w = model.addMVar(n, name="w", ub=1)
-                model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+
+                # Decision variables: w_i ≥ 0, upper-bound 1
+                w = model.addMVar(n, lb=0, ub=1, name="w")
+
+                # Budget constraint: Σ w_i = 1
+                model.addConstr(w.sum() == 1, name="budget")
+
+                # Linear part: expected return
+                exp_ret = mu @ w                    # μᵀw
+
+                # Quadratic part: portfolio variance
+                risk = w @ (Sigma @ w)              # wᵀΣw
+
+                # Objective: maximize μᵀw – (γ/2) wᵀΣw
+                model.setObjective(exp_ret - 0.5 * gamma * risk, gp.GRB.MAXIMIZE)
+                
 
                 """
                 TODO: Complete Task 3 Above
