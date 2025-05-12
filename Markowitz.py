@@ -57,11 +57,13 @@ class EqualWeightPortfolio:
         # Get the assets by excluding the specified column
         assets = df.columns[df.columns != self.exclude]
         self.portfolio_weights = pd.DataFrame(index=df.index, columns=df.columns)
-
         """
         TODO: Complete Task 1 Below
         """
-
+        # Compute equal weights ("SPY" is excluded)
+        num_assets = len(assets) 
+        equal_weight = 1 / num_assets
+        self.portfolio_weights[assets] = equal_weight
         """
         TODO: Complete Task 1 Above
         """
