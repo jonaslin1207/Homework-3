@@ -115,6 +115,21 @@ class RiskParityPortfolio:
         TODO: Complete Task 2 Below
         """
 
+        # print(df_returns.head())
+        for i in range(self.lookback+1, len(df_returns)):
+            # Slice the DataFrame to get the lookback window
+            # Containing only the assets
+            cur_window = df_returns.iloc[i - self.lookback : i][assets]
+            # Standard deviation of returns in the lookback window
+            sigma = cur_window.std(ddof=1)
+            # Calculate the weights based on risk parity
+            w = 1 / sigma
+            # Normalize the weights to sum to 1
+            w = w / w.sum()
+            # Assign the weights to the portfolio
+            self.portfolio_weights.loc[df_returns.index[i], assets] = w
+
+        # self.portfolio_weights.bfill(limit=self.lookback, inplace=True)
         """
         TODO: Complete Task 2 Above
         """
