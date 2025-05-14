@@ -50,12 +50,14 @@ class MyPortfolio:
     NOTE: You can modify the initialization function
     """
 
-    def __init__(self, price, exclude, lookback=5, gamma=0.01):
+    def __init__(self, price, exclude, lookback=5, gamma=0.01, momentum_window=90, top_frac=0.3):
         self.price = price
         self.returns = price.pct_change().fillna(0)
         self.exclude = exclude
         self.lookback = lookback
         self.gamma = gamma
+        self.momentum_window = momentum_window
+        self.top_frac = top_frac
 
     def calculate_weights(self):
         # Get the assets by excluding the specified column
@@ -69,45 +71,81 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+        momentum_window = self.momentum_window
+        top_frac = self.top_frac
 
-        delta = 0.1
+        prev_w = pd.Series(0, index=assets)       # 初始空倉
+        for i in range(momentum_window, len(self.price)):
+            date = self.price.index[i]
 
-        for i in range(self.lookback, len(self.price)):
-            date_idx = self.price.index[i]
-            window = self.returns.iloc[i - self.lookback : i]
+            # ---- Rebalance gate：每月第一個交易日才調倉 ----
+            if i > momentum_window and date.month == self.price.index[i-1].month:
+                # 非調倉日 → 沿用前值
+                self.portfolio_weights.loc[date, assets] = prev_w
+                continue
 
-            mu = window[assets].mean().values
-
-            # -- 協方差矩陣 (加一點 ridge 避免奇異)
-            Sigma = window[assets].cov().values
-            Sigma = (1-delta)*Sigma + delta*np.diag(np.diag(Sigma))
-            Sigma += 1e-6 * np.eye(len(assets))
-
-            # -- 建立 Gurobi model
-            try:
-                m = gp.Model()
-                m.Params.OutputFlag = 0          # 關閉螢幕輸出
-                w = m.addMVar(len(assets), lb=0, name="w")    # long-only
-                m.addConstr(w.sum() == 1)                     # 全額投入
-                m.setObjective(w @ Sigma @ w - self.gamma * w @ mu, gp.GRB.MINIMIZE)
-                m.optimize()
-
-                opt_w = w.X                           # 取出最佳解
-
-            except gp.GurobiError:
-                print(f"Error when optimizing model: {gp.GurobiError}")
-                # 如果求解失敗，退而求其次：等權重
-                opt_w = np.repeat(1 / len(assets), len(assets))
-
-            sigma_t = np.sqrt(opt_w.T @ Sigma @ opt_w)
-            sigma_target = 0.04 / np.sqrt(252)
-            scale = sigma_target / sigma_t
-            w_scaled = np.clip(opt_w * scale, 0, 1)
-            w_scaled = w_scaled / w_scaled.sum() 
+            # ---- 1. 計算動能 (= 累積報酬) ----
+            window = self.returns.iloc[i - momentum_window : i-1]
+            cum_ret = (1 + window[assets]).prod() - 1          # Series
+            cum_ret = cum_ret / (1 + window[assets].iloc[-1])  # 以當日報酬率做調整
+            score = cum_ret.rank(ascending=False)             # 由高到低排序
+            win = score[score <= len(assets) * top_frac].index  # 前 30% 的 winner
 
 
-            # -- 存回 dataframe
-            self.portfolio_weights.loc[date_idx, assets] = w_scaled
+            # ---- 2. 挑前 30 % winner 並等權 ----
+            k = max(1, int(len(assets) * top_frac))
+            w = pd.Series(0, index=assets)
+            sigma_ind = window[assets].std().replace(0, 1e-9)
+            sigma_ind = sigma_ind[win]                      # 只取 winner 的標準差
+            sigma_ind = sigma_ind / sigma_ind.sum()         # 標準差歸一
+            w[win] = 1 / k * sigma_ind                      # 等權重
+
+
+            w = np.clip(w, 0, 0.3)        # 單一 ETF ≤30%
+            w /= w.sum()
+            
+            # ---- 3. 存權重 & 更新 prev_w ----
+            self.portfolio_weights.loc[date, assets] = w
+            prev_w = w
+        
+        # delta = 0.1
+
+        # for i in range(self.lookback, len(self.price)):
+        #     date_idx = self.price.index[i]
+        #     window = self.returns.iloc[i - self.lookback : i]
+
+        #     mu = window[assets].mean().values
+
+        #     # -- 協方差矩陣 (加一點 ridge 避免奇異)
+        #     Sigma = window[assets].cov().values
+        #     Sigma = (1-delta)*Sigma + delta*np.diag(np.diag(Sigma))
+        #     Sigma += 1e-6 * np.eye(len(assets))
+
+        #     # -- 建立 Gurobi model
+        #     try:
+        #         m = gp.Model()
+        #         m.Params.OutputFlag = 0          # 關閉螢幕輸出
+        #         w = m.addMVar(len(assets), lb=0, name="w")    # long-only
+        #         m.addConstr(w.sum() == 1)                     # 全額投入
+        #         m.setObjective(w @ Sigma @ w - self.gamma * w @ mu, gp.GRB.MINIMIZE)
+        #         m.optimize()
+
+        #         opt_w = w.X                           # 取出最佳解
+
+        #     except gp.GurobiError:
+        #         print(f"Error when optimizing model: {gp.GurobiError}")
+        #         # 如果求解失敗，退而求其次：等權重
+        #         opt_w = np.repeat(1 / len(assets), len(assets))
+
+        #     sigma_t = np.sqrt(opt_w.T @ Sigma @ opt_w)
+        #     sigma_target = 0.04 / np.sqrt(252)
+        #     scale = sigma_target / sigma_t
+        #     w_scaled = np.clip(opt_w * scale, 0, 1)
+        #     w_scaled = w_scaled / w_scaled.sum() 
+
+
+        #     # -- 存回 dataframe
+        #     self.portfolio_weights.loc[date_idx, assets] = w_scaled
 
             
 
@@ -201,6 +239,7 @@ class AssignmentJudge:
         if not self.check_portfolio_position(self.mp[0]):
             return 0
         if self.report_metrics(df, self.mp)[1] > 1:
+            print(sharpe)
             print("Problem 4.1 Success - Get 15 points")
             return 15
         else:
