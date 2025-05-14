@@ -107,47 +107,6 @@ class MyPortfolio:
             # ---- 3. 存權重 & 更新 prev_w ----
             self.portfolio_weights.loc[date, assets] = w
             prev_w = w
-        
-        # delta = 0.1
-
-        # for i in range(self.lookback, len(self.price)):
-        #     date_idx = self.price.index[i]
-        #     window = self.returns.iloc[i - self.lookback : i]
-
-        #     mu = window[assets].mean().values
-
-        #     # -- 協方差矩陣 (加一點 ridge 避免奇異)
-        #     Sigma = window[assets].cov().values
-        #     Sigma = (1-delta)*Sigma + delta*np.diag(np.diag(Sigma))
-        #     Sigma += 1e-6 * np.eye(len(assets))
-
-        #     # -- 建立 Gurobi model
-        #     try:
-        #         m = gp.Model()
-        #         m.Params.OutputFlag = 0          # 關閉螢幕輸出
-        #         w = m.addMVar(len(assets), lb=0, name="w")    # long-only
-        #         m.addConstr(w.sum() == 1)                     # 全額投入
-        #         m.setObjective(w @ Sigma @ w - self.gamma * w @ mu, gp.GRB.MINIMIZE)
-        #         m.optimize()
-
-        #         opt_w = w.X                           # 取出最佳解
-
-        #     except gp.GurobiError:
-        #         print(f"Error when optimizing model: {gp.GurobiError}")
-        #         # 如果求解失敗，退而求其次：等權重
-        #         opt_w = np.repeat(1 / len(assets), len(assets))
-
-        #     sigma_t = np.sqrt(opt_w.T @ Sigma @ opt_w)
-        #     sigma_target = 0.04 / np.sqrt(252)
-        #     scale = sigma_target / sigma_t
-        #     w_scaled = np.clip(opt_w * scale, 0, 1)
-        #     w_scaled = w_scaled / w_scaled.sum() 
-
-
-        #     # -- 存回 dataframe
-        #     self.portfolio_weights.loc[date_idx, assets] = w_scaled
-
-            
 
         """
         TODO: Complete Task 4 Above
